@@ -1,0 +1,134 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A common set of tools used in all templates.
+Parameters:
+  EMail:
+    Type: String
+    Description: Insert your email for the SNS topic. You do still need to approve the initial email to receive finish alerts.
+  VPC:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC used for the ec2 plotter instance
+  Subnet:
+    Type: AWS::EC2::Subnet::Id
+    Description: Subnet used for the ec2 plotter instance
+Resources:
+# Setting up final destination for the plots
+  S3FinalDestination:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "chiaplots-${AWS::AccountId}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: alias/aws/s3
+            #BucketKeyEnabled: true
+      Tags:
+        - Key: Crypto
+          Value: Chia
+        - Key: Experiment
+          Value: Common
+# Setup way to let farmer know plot is done.
+  FinisherSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: Plot-Finishers
+      KmsMasterKeyId: alias/aws/sns
+      Tags:
+        - Key: Crypto
+          Value: Chia
+        - Key: Experiment
+          Value: Common
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !Ref EMail
+      Protocol: email
+      TopicArn: !Ref FinisherSNS
+# Setting up Service Gateway for S3
+  S3Gateway:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub com.amazonaws.${ AWS::Region }.s3
+      VpcId: !Ref VPC
+
+# Setup IAM Role for use for EC2 plotters
+  PlotterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - !Sub ec2.${ AWS::URLSuffix }
+            Action:
+              - 'sts:AssumeRole'
+# A policy document for S3 to allow putting (and some extra other rights)
+  PlotterBucketPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: PlotterBucketPolicy
+      Roles:
+        - !Ref PlotterRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+             - 's3:ListAllMyBuckets'
+            Resource: 'arn:aws:s3:::*'
+          - Effect: Allow
+            Action:
+              - 's3:ListBucket'
+              - 's3:GetBucketLocation'
+            Resource: !GetAtt S3FinalDestination.Arn
+          - Effect: Allow
+            Action:
+              - 's3:PutObject'
+              - 's3:PutObjectAcl'
+              - 's3:GetObject'
+              - 's3:GetObjectAcl'
+              - 's3:DeleteObject'
+            Resource: !Sub 
+              - ${bucketARN}/*
+              - bucketARN: !GetAtt S3FinalDestination.Arn
+# A policy document that allows publishing to our SNS topic
+  PlotterSNSPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: PlotterSNSPolicy
+      Roles:
+      - !Ref PlotterRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'sns:Publish'
+            Resource: !Ref FinisherSNS
+# Outputs for the subtemplates
+Outputs:
+  StackARN:
+    Description: Copy this for deploying the subtemplates
+    Value: !Ref AWS::StackName
+  FinishARN:
+    Description: ARN of the SNS topic used to warn farmer when a plot finishes.
+    Value: !Ref FinisherSNS
+    Export:
+      Name: !Sub CommonPlotterResourceSNS-${ AWS::StackName }
+  S3ARN:
+    Description: ARN of the S3 bucket for the final plots
+    Value: !GetAtt S3FinalDestination.Arn
+    Export:
+      Name: !Sub CommonPlotterResourceS3-${ AWS::StackName }
+  VPCARN:
+    Description: ARN of VPC the plotter is in
+    Value: !Ref VPC
+    Export:
+      Name: !Sub CommonPlotterResourceVPC-${ AWS::StackName }
+  SubnetARN:
+    Description: SubnetARN the plotter is in
+    Value: !Ref Subnet
+    Export:
+      Name: !Sub CommonPlotterResourceSubnet-${ AWS::StackName }
