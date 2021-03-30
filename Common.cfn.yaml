@@ -10,7 +10,14 @@ Parameters:
   Subnet:
     Type: AWS::EC2::Subnet::Id
     Description: Subnet used for the ec2 plotter instance
+  PublicFarmKey:
+    Type: String
+    Description: Your Public Farm key for use in generating plots (won't be used in this cfn-template, only subtemplates)
+  PublicPoolKey:
+    Type: String
+    Description: Your Public Pool key for use in generating plots (won't be used in this cfn-template, only subtemplates)
 Resources:
+## AWS 'physical' Resources
 # Setting up final destination for the plots
   S3FinalDestination:
     Type: AWS::S3::Bucket
@@ -50,11 +57,21 @@ Resources:
     Properties:
       ServiceName: !Sub com.amazonaws.${ AWS::Region }.s3
       VpcId: !Ref VPC
+# Setup parameter store for storing cloudwatchagent configs
+  CWAconfig:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Value: TBD
 
+## Permissions
 # Setup IAM Role for use for EC2 plotters
   PlotterRole:
     Type: AWS::IAM::Role
     Properties:
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -107,6 +124,14 @@ Resources:
             Action:
               - 'sns:Publish'
             Resource: !Ref FinisherSNS
+# A profile instance to use with EC2
+  PlotterInstaceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: PlotterBucketProfile
+      Roles:
+        - !Ref PlotterRole
+
 # Outputs for the subtemplates
 Outputs:
   StackARN:
@@ -132,3 +157,18 @@ Outputs:
     Value: !Ref Subnet
     Export:
       Name: !Sub CommonPlotterResourceSubnet-${ AWS::StackName }
+  InstanceProfileARN:
+    Description: Arn of Instance Profile for setting up EC2 in Cfn
+    Value: !GetAtt PlotterInstaceProfile.Arn
+    Export:
+      Name: !Sub CommonPlotterInstaceProfile-${ AWS::StackName }
+  PublicFarmKeyExport:
+    Description: Your Public Farm key for use in generating plots
+    Value: !Ref PublicFarmKey
+    Export:
+      Name: !Sub CommonPlotterResourceFarmKey-${ AWS::StackName }
+  PublicPoolKeyExport:
+    Description: Your Public Pool key for use in generating plots
+    Value: !Ref PublicPoolKey
+    Export:
+      Name: !Sub CommonPlotterResourcePoolKey-${ AWS::StackName }
