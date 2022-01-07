@@ -1,0 +1,18 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: A bare minimum Chia cloud plotter template
+Parameters: 
+  AMI:
+    Type: AWS::EC2::Image::Id
+    Default: ""
+  Key:
+    Type: AWS::EC2::KeyPair::KeyName
+  CommonCFNName:
+    Type: String
+  
+Resources:
+  # Volume storage 
+
+  PlotDevice:
+    Type: AWS::EC2::Instance
+    Properties:
+      

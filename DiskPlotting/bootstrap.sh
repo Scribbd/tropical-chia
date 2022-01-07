@@ -24,18 +24,30 @@ dd if=/dev/zero of=/swapfile bs=128M count=32
 chmod 600 /swapfile
 mkswap /swapfile
 swapon /swapfile
-echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
 
 # Setup Cloud Watch Agent
-
-
-# Setup plotting drive
-
 
 # Install Chia blockchain
 sh /home/ec2-user/install.sh
 
+# Setting up plotting drive
+# Stolen from https://binx.io/blog/2019/01/26/how-to-mount-an-ebs-volume-on-nvme-based-instance-types/
+# Waiting for drive mount
+while [[ ! -b $(readlink -f /dev/xvdd) ]]; do
+    echo "waiting for the disk to appear..">&2;
+    sleep 5;
+done
+# Format drive only when it isn't
+blkid $(readlink -f /dev/xvdd) || mkfs -t ext4 $(readlink -f /dev/xvdd)
+# Mount drive
+mkdir /home/ec2-user/plot
+grep -q "$(readlink -f /dev/xvdd) /var/mqm " /proc/mounts || mount /home/ec2-user/plot
+
 # Activate!
 . ./activate
 
+# Start plotting
 
+# Copy to S3 final destination
+
+# Self-terminate
